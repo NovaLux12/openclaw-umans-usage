@@ -63,6 +63,16 @@ function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function isFoundingSeat(
+  slug: string | undefined,
+  displayName: string | undefined,
+): boolean {
+  if (!slug && !displayName) return false;
+  const lowerSlug = slug?.toLowerCase() ?? "";
+  const lowerName = displayName?.toLowerCase() ?? "";
+  return lowerSlug.includes("founding") || lowerName.includes("founding");
+}
+
 async function readPayload(response: Response, timeoutMs: number): Promise<UmansUsageResponse> {
   const buffer = await readResponseWithLimit(response, UMANS_USAGE_RESPONSE_MAX_BYTES, {
     chunkTimeoutMs: timeoutMs,
@@ -144,6 +154,9 @@ export async function fetchUmansUsage(params: {
 
   const planSlug = stringOrUndefined(data.plan?.slug) ?? "unknown";
   const planDisplayName = stringOrUndefined(data.plan?.display_name) ?? "Umans";
+  const founding = isFoundingSeat(planSlug, planDisplayName);
+  const displayName = founding ? `${planDisplayName} ✨` : planDisplayName;
+
   const requestLimit = nonNegativeNumber(data.limits?.requests?.limit);
   const requestHardCap = nonNegativeNumber(data.limits?.requests?.hard_cap);
   const effectiveRequestLimit = requestLimit ?? requestHardCap;
@@ -156,13 +169,21 @@ export async function fetchUmansUsage(params: {
   const tokensOut = nonNegativeNumber(data.usage?.tokens_out);
   const tokensCached = nonNegativeNumber(data.usage?.tokens_cached);
 
+  // Headroom: the buffer between soft limit and hard cap
+  const headroom =
+    requestHardCap !== undefined && requestLimit !== undefined && requestHardCap > requestLimit
+      ? requestHardCap - requestLimit
+      : undefined;
+
   const windows: NonNullable<ProviderUsageSnapshot["windows"]> = [];
   const windowResetMs = parseResetAtMs(stringOrUndefined(data.window?.resets_at));
   if (effectiveRequestLimit !== undefined && effectiveRequestLimit > 0) {
     const used = Math.max(0, effectiveRequestLimit - (remainingRequests ?? effectiveRequestLimit));
     const pct = Math.min(100, Math.max(0, (used / effectiveRequestLimit) * 100));
+    // Founding seats: once you tap into the headroom, the label shifts as an easter egg
+    const inNovaZone = founding && headroom !== undefined && used >= effectiveRequestLimit;
     windows.push({
-      label: "Request window",
+      label: inNovaZone ? "✨ Nova's zone" : "Request window",
       usedPercent: pct,
       ...(windowResetMs !== undefined ? { resetAt: windowResetMs } : {}),
     });
@@ -186,11 +207,23 @@ export async function fetchUmansUsage(params: {
   if (tokensCached !== undefined) {
     billing.push({ type: "spend", label: "Tokens cached", amount: tokensCached, unit: "tokens" });
   }
+  // Founding headroom — a visual nod to the safety net
+  if (headroom !== undefined && headroom > 0) {
+    billing.push({
+      type: "spend",
+      label: "Headroom (Nova's safety net ✨)",
+      amount: headroom,
+      unit: "requests",
+    });
+  }
 
   const resetTimeLabel = formatResetTime(windowResetMs);
   const summaryParts: string[] = [];
   if (remainingRequests !== undefined && effectiveRequestLimit !== undefined) {
     summaryParts.push(`${remainingRequests}/${effectiveRequestLimit} requests remaining`);
+  }
+  if (founding && headroom !== undefined) {
+    summaryParts.push(`+${headroom} founding headroom`);
   }
   if (concurrentSessions !== undefined && effectiveConcurrencyLimit !== undefined) {
     summaryParts.push(`${concurrentSessions}/${effectiveConcurrencyLimit} concurrent sessions`);
@@ -202,7 +235,7 @@ export async function fetchUmansUsage(params: {
 
   return {
     provider: "umans",
-    displayName: planDisplayName,
+    displayName,
     windows,
     ...(billing.length > 0 ? { billing } : {}),
     ...(summary ? { summary } : {}),
