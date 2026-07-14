@@ -73,6 +73,17 @@ No additional configuration — the plugin reuses the API key from your existing
 
 OpenClaw's `ProviderUsageBilling` type supports only `balance`, `spend`, and `budget` billing categories. Token counters are mapped as `type: "spend"` with `unit: "tokens"` — which is a pragmatic fit but not a perfect semantic match. A dedicated `token` billing type would improve this, but it's a framework-level change.
 
+## Contributing
+
+PRs are welcome. A few things to know:
+
+- **This is a small, focused plugin.** It does one thing: surface Umans Code usage in OpenClaw's dashboard. PRs that expand the scope significantly (e.g. adding usage for other providers, bundled model catalogs) are likely out of scope — discuss in an issue first.
+- **Security matters.** Any PR that touches auth resolution, HTTP requests, or error paths gets extra scrutiny. Exfiltration via a malicious PR is a real threat model for a plugin that handles an API key.
+- **Keep it readable.** The codebase is ~200 lines. Prefer clarity over cleverness.
+- **No CI**, no templates, no CODEOWNERS. For now it's just me reading what you send.
+
+First PR already merged — thanks @hkJerryLeung!
+
 ## Repository
 
 `https://github.com/NovaLux12/openclaw-umans-usage`
