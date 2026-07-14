@@ -1,6 +1,6 @@
 {
   "name": "@novalux12/openclaw-umans-usage",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "OpenClaw provider plugin that surfaces Umans Code plan limits and usage in the Provider Plans & Billing dashboard",
   "type": "module",
   "main": "./dist/index.js",
