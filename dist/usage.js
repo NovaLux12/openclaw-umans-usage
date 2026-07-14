@@ -30,11 +30,22 @@ async function readPayload(response, timeoutMs) {
     }
     return data;
 }
-function formatResetTime(resetsAt) {
+function parseResetAtMs(resetsAt) {
     if (!resetsAt)
         return undefined;
     try {
-        const date = new Date(resetsAt);
+        const ms = Date.parse(resetsAt);
+        return Number.isFinite(ms) ? ms : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+function formatResetTime(resetsAtMs) {
+    if (resetsAtMs === undefined)
+        return undefined;
+    try {
+        const date = new Date(resetsAtMs);
         if (Number.isNaN(date.getTime()))
             return undefined;
         return date.toLocaleString("en-GB", {
@@ -96,11 +107,14 @@ export async function fetchUmansUsage(params) {
     const tokensOut = nonNegativeNumber(data.usage?.tokens_out);
     const tokensCached = nonNegativeNumber(data.usage?.tokens_cached);
     const windows = [];
+    const windowResetMs = parseResetAtMs(stringOrUndefined(data.window?.resets_at));
     if (effectiveRequestLimit !== undefined && effectiveRequestLimit > 0) {
         const used = Math.max(0, effectiveRequestLimit - (remainingRequests ?? effectiveRequestLimit));
+        const pct = Math.min(100, Math.max(0, (used / effectiveRequestLimit) * 100));
         windows.push({
             label: "Request window",
-            usedPercent: Math.min(100, Math.max(0, (used / effectiveRequestLimit) * 100)),
+            usedPercent: pct,
+            ...(windowResetMs !== undefined ? { resetAt: windowResetMs } : {}),
         });
     }
     if (effectiveConcurrencyLimit !== undefined && effectiveConcurrencyLimit > 0) {
@@ -108,6 +122,7 @@ export async function fetchUmansUsage(params) {
         windows.push({
             label: "Concurrency",
             usedPercent: pct,
+            ...(windowResetMs !== undefined ? { resetAt: windowResetMs } : {}),
         });
     }
     const billing = [];
@@ -120,7 +135,7 @@ export async function fetchUmansUsage(params) {
     if (tokensCached !== undefined) {
         billing.push({ type: "spend", label: "Tokens cached", amount: tokensCached, unit: "tokens" });
     }
-    const resetAt = formatResetTime(stringOrUndefined(data.window?.resets_at));
+    const resetTimeLabel = formatResetTime(windowResetMs);
     const summaryParts = [];
     if (remainingRequests !== undefined && effectiveRequestLimit !== undefined) {
         summaryParts.push(`${remainingRequests}/${effectiveRequestLimit} requests remaining`);
@@ -128,8 +143,8 @@ export async function fetchUmansUsage(params) {
     if (concurrentSessions !== undefined && effectiveConcurrencyLimit !== undefined) {
         summaryParts.push(`${concurrentSessions}/${effectiveConcurrencyLimit} concurrent sessions`);
     }
-    if (resetAt) {
-        summaryParts.push(`resets at ${resetAt}`);
+    if (resetTimeLabel) {
+        summaryParts.push(`resets at ${resetTimeLabel}`);
     }
     const summary = summaryParts.length > 0 ? summaryParts.join(" · ") : undefined;
     return {

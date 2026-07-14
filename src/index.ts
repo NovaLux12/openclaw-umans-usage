@@ -8,7 +8,7 @@ export default {
   name: "Umans Code usage dashboard",
   description:
     "Surfaces Umans Code plan limits, request budgets, and token usage in OpenClaw's Provider Plans & Billing dashboard.",
-  version: "0.1.1",
+  version: "0.1.2",
   register(api: OpenClawPluginApi) {
     api.registerProvider({
       id: PROVIDER_ID,
@@ -16,7 +16,7 @@ export default {
       docsPath: "/providers/umans",
       auth: [],
       resolveUsageAuth: (ctx) => {
-        const apiKey = ctx.resolveApiKeyFromConfigAndStore();
+        const apiKey = ctx.resolveApiKeyFromConfigAndStore({ providerIds: ["umans"] });
         return apiKey ? { token: apiKey } : null;
       },
       fetchUsageSnapshot: async (ctx) => {
