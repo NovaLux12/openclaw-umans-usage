@@ -35,6 +35,12 @@ export type UmansUsageResponse = {
         tokens_cached?: number;
     };
 };
+/** @internal exported for testing (#2) */
+export declare function nonNegativeNumber(value: unknown): number | undefined;
+/** @internal exported for testing (#2) */
+export declare function isFoundingSeat(slug: string | undefined, displayName: string | undefined): boolean;
+/** @internal exported for testing (#2) */
+export declare function parseResetAtMs(resetsAt: string | undefined): number | undefined;
 export declare function fetchUmansUsage(params: {
     token: string;
     timeoutMs: number;

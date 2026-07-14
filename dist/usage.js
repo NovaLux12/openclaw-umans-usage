@@ -2,7 +2,8 @@ import { buildUsageHttpErrorSnapshot } from "openclaw/plugin-sdk/provider-usage"
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
 const UMANS_USAGE_URL = "https://api.code.umans.ai/v1/usage";
 const UMANS_USAGE_RESPONSE_MAX_BYTES = 1024 * 1024;
-function nonNegativeNumber(value) {
+/** @internal exported for testing (#2) */
+export function nonNegativeNumber(value) {
     const parsed = typeof value === "number"
         ? value
         : typeof value === "string" && value.trim()
@@ -18,12 +19,33 @@ function objectRecord(value) {
 function stringOrUndefined(value) {
     return typeof value === "string" ? value : undefined;
 }
-function isFoundingSeat(slug, displayName) {
+/** @internal exported for testing (#2) */
+export function isFoundingSeat(slug, displayName) {
     if (!slug && !displayName)
         return false;
     const lowerSlug = slug?.toLowerCase() ?? "";
     const lowerName = displayName?.toLowerCase() ?? "";
     return lowerSlug.includes("founding") || lowerName.includes("founding");
+}
+/**
+ * Retry a fetch call on transient failure (#5).
+ * One retry after 2s covers DNS hiccups and brief network blips
+ * without missing a whole 60s dashboard poll cycle.
+ */
+async function fetchWithRetry(fetchFn, url, options, retries = 1, delayMs = 2000) {
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await fetchFn(url, options);
+        }
+        catch (err) {
+            lastError = err;
+            if (attempt < retries) {
+                await new Promise((r) => setTimeout(r, delayMs));
+            }
+        }
+    }
+    throw lastError;
 }
 async function readPayload(response, timeoutMs) {
     const buffer = await readResponseWithLimit(response, UMANS_USAGE_RESPONSE_MAX_BYTES, {
@@ -37,7 +59,8 @@ async function readPayload(response, timeoutMs) {
     }
     return data;
 }
-function parseResetAtMs(resetsAt) {
+/** @internal exported for testing (#2) */
+export function parseResetAtMs(resetsAt) {
     if (!resetsAt)
         return undefined;
     try {
@@ -55,6 +78,9 @@ function formatResetTime(resetsAtMs) {
         const date = new Date(resetsAtMs);
         if (Number.isNaN(date.getTime()))
             return undefined;
+        // en-GB locale is deliberate (#4): consistent across all deployments,
+        // and the dashboard is primarily UK-centric. Accepting the system default
+        // would show 24h vs 12h inconsistently across machines.
         return date.toLocaleString("en-GB", {
             hour: "2-digit",
             minute: "2-digit",
@@ -68,7 +94,8 @@ function formatResetTime(resetsAtMs) {
 export async function fetchUmansUsage(params) {
     let response;
     try {
-        response = await params.fetchFn(UMANS_USAGE_URL, {
+        // One retry on transient failure so a brief blip doesn't miss a whole poll cycle (#5)
+        response = await fetchWithRetry(params.fetchFn, UMANS_USAGE_URL, {
             headers: {
                 Accept: "application/json",
                 Authorization: `Bearer ${params.token}`,
@@ -81,7 +108,7 @@ export async function fetchUmansUsage(params) {
             provider: "umans",
             displayName: "Umans",
             windows: [],
-            error: "Usage unavailable",
+            error: "Network error — usage endpoint unreachable",
         };
     }
     if (!response.ok) {
@@ -92,12 +119,13 @@ export async function fetchUmansUsage(params) {
     try {
         data = await readPayload(response, params.timeoutMs);
     }
-    catch {
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         return {
             provider: "umans",
             displayName: "Umans",
             windows: [],
-            error: "Malformed usage response",
+            error: `Bad usage response — ${msg}`,
         };
     }
     const planSlug = stringOrUndefined(data.plan?.slug) ?? "unknown";
@@ -180,7 +208,8 @@ export async function fetchUmansUsage(params) {
         windows,
         ...(billing.length > 0 ? { billing } : {}),
         ...(summary ? { summary } : {}),
-        plan: planSlug === "code_pro" ? "Code Pro" : planDisplayName,
+        // Use the API's display_name directly (#6) — new plans work without code changes
+        plan: planDisplayName,
     };
 }
 //# sourceMappingURL=usage.js.map
