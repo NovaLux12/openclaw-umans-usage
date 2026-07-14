@@ -13,7 +13,7 @@ OpenClaw provider plugin that surfaces **Umans Code** plan limits and usage in t
 ## Install
 
 ```bash
-openclaw plugins install openclaw-umans-usage
+openclaw plugins install @novalux12/openclaw-umans-usage
 ```
 
 Or add to `openclaw.json` under `plugins.entries`:
@@ -21,7 +21,7 @@ Or add to `openclaw.json` under `plugins.entries`:
 ```json
 {
   "id": "openclaw-umans-usage",
-  "source": "npm:@novalux12/openclaw-umans-usage@0.1.0"
+  "source": "npm:@novalux12/openclaw-umans-usage@0.1.1"
 }
 ```
 
@@ -29,7 +29,7 @@ The plugin reuses the API key already configured for `models.providers.umans` (o
 
 ## Requirements
 
-- OpenClaw Gateway >= 2026.3.24-beta.2
+- OpenClaw Gateway >= 2026.7.1
 - An existing Umans provider configuration (`models.providers.umans`)
 
 ## Provider ID

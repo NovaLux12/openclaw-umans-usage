@@ -4,7 +4,7 @@ export default {
     id: "openclaw-umans-usage",
     name: "Umans Code usage dashboard",
     description: "Surfaces Umans Code plan limits, request budgets, and token usage in OpenClaw's Provider Plans & Billing dashboard.",
-    version: "0.1.0",
+    version: "0.1.1",
     register(api) {
         api.registerProvider({
             id: PROVIDER_ID,

@@ -2,11 +2,20 @@
   "id": "openclaw-umans-usage",
   "name": "Umans Code usage dashboard",
   "description": "Surfaces Umans Code plan limits, request budgets, and token usage in OpenClaw's Provider Plans & Billing dashboard.",
-  "version": "0.1.0",
-  "extensions": ["./dist/index.js"],
+  "version": "0.1.1",
+  "activation": {
+    "onStartup": false
+  },
+  "enabledByDefault": true,
   "providers": ["umans"],
-  "author": "NovaLux12",
-  "license": "MIT",
-  "repository": "https://github.com/NovaLux12/openclaw-umans-usage",
-  "minGatewayVersion": "2026.3.24-beta.2"
+  "contracts": {
+    "usageProviders": ["umans"]
+  },
+  "extensions": ["./dist/index.js"],
+  "minGatewayVersion": "2026.7.1",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
 }
