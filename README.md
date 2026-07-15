@@ -9,6 +9,8 @@ OpenClaw provider plugin that surfaces **Umans Code** plan limits, request quota
 - **Concurrency** — active sessions vs your plan cap
 - **Token counters** — input, output, and cached tokens for the current window
 - **Reset time** — both as a per-window countdown and in the summary line
+- <img width="522" height="366" alt="image" src="https://github.com/user-attachments/assets/6d7ae513-762d-42d7-8bc9-46fabdbbcc09" />
+
 
 ## How it works
 
