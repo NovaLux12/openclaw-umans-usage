@@ -88,7 +88,7 @@ First PR already merged — thanks @hkJerryLeung!
 
 ## Repository
 
-`https://github.com/NovaLux12/openclaw-umans-usage`
+`https://github.com/NovaLux12/openclaw-umans-usage``
 
 ## License
 
