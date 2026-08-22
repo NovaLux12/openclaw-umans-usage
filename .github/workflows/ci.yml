@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install openclaw@2026.7.1 typescript@^5.5.0 --no-save || true
+      - run: npx tsc --noEmit
+      - run: node --experimental-strip-types --test src/usage.test.ts

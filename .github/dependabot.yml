@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # security_update_not_possible: express-rate-limit declares ip-address ^10.2.0;
+      # resolver keeps nesting 10.2.0 despite our package.json override.
+      # Revisit when express-rate-limit raises its floor.
+      - dependency-name: ip-address
