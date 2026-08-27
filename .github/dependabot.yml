@@ -4,8 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    ignore:
-      # security_update_not_possible: express-rate-limit declares ip-address ^10.2.0;
-      # resolver keeps nesting 10.2.0 despite our package.json override.
-      # Revisit when express-rate-limit raises its floor.
-      - dependency-name: ip-address
+    # openclaw is deliberately NOT a locked devDependency (npm-shrinkwrap.json in
+    # the published package means overrides cannot patch its subtree, and its
+    # vulnerable transitive deps made every Dependabot security-update job fail).
+    # CI installs it ad hoc with --no-save; see .github/workflows/ci.yml.
