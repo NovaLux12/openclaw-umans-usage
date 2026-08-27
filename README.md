@@ -33,7 +33,7 @@ Or add to `openclaw.json` under `plugins.entries`:
 ```json
 {
   "id": "openclaw-umans-usage",
-  "source": "npm:@novalux12/openclaw-umans-usage@0.1.2"
+  "source": "npm:@novalux12/openclaw-umans-usage@0.1.3"
 }
 ```
 
@@ -82,13 +82,17 @@ PRs are welcome. A few things to know:
 - **This is a small, focused plugin.** It does one thing: surface Umans Code usage in OpenClaw's dashboard. PRs that expand the scope significantly (e.g. adding usage for other providers, bundled model catalogs) are likely out of scope — discuss in an issue first.
 - **Security matters.** Any PR that touches auth resolution, HTTP requests, or error paths gets extra scrutiny. Exfiltration via a malicious PR is a real threat model for a plugin that handles an API key.
 - **Keep it readable.** The codebase is ~200 lines. Prefer clarity over cleverness.
-- **No CI**, no templates, no CODEOWNERS. For now it's just me reading what you send.
+- **CI runs on GitHub Actions** — `tsc --noEmit` plus the Node test suite on every push and PR. There are no issue templates or CODEOWNERS; just open a PR.
+- **Local setup:** openclaw is not a locked devDependency (its published package ships an `npm-shrinkwrap.json`, so we cannot patch its transitive dependency tree). Install it ad hoc before building:
+  ```bash
+  npm install openclaw@2026.7.1 --no-save
+  ```
 
 First PR already merged — thanks @hkJerryLeung!
 
 ## Repository
 
-`https://github.com/NovaLux12/openclaw-umans-usage``
+`https://github.com/NovaLux12/openclaw-umans-usage`
 
 ## License
 
