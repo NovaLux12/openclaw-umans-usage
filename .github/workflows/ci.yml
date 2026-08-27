@@ -14,6 +14,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install openclaw@2026.7.1 typescript@^5.5.0 --no-save || true
+      - run: npm ci
+      # openclaw is not a locked devDependency (its published npm-shrinkwrap.json
+      # pins a transitive dependency tree we cannot patch). Install it ad hoc so
+      # `openclaw/plugin-sdk/*` types resolve for tsc.
+      - run: npm install openclaw@2026.7.1 --no-save --no-audit --no-fund
       - run: npx tsc --noEmit
-      - run: node --experimental-strip-types --test src/usage.test.ts
+      - run: npm test
