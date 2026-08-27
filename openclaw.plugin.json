@@ -7,15 +7,31 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["umans"],
+  "providers": [
+    "umans"
+  ],
   "contracts": {
-    "usageProviders": ["umans"]
+    "usageProviders": [
+      "umans"
+    ]
   },
-  "extensions": ["./dist/index.js"],
+  "extensions": [
+    "./dist/index.js"
+  ],
   "minGatewayVersion": "2026.7.1",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "setup": {
+    "providers": [
+      {
+        "id": "umans",
+        "envVars": [
+          "UMANS_API_KEY"
+        ]
+      }
+    ]
   }
 }
