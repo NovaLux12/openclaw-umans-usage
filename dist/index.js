@@ -4,7 +4,7 @@ export default {
     id: "openclaw-umans-usage",
     name: "Umans wallet & usage dashboard",
     description: "Surfaces Umans wallet balance (when available), burst limits, and token usage in OpenClaw's Provider Plans & Billing dashboard.",
-    version: "0.1.4",
+    version: "0.1.5",
     register(api) {
         api.registerProvider({
             id: PROVIDER_ID,

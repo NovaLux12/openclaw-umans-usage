@@ -202,7 +202,7 @@ Or add to `openclaw.json` under `plugins.entries`:
 ```json
 {
   "id": "openclaw-umans-usage",
-  "source": "npm:@novalux12/openclaw-umans-usage@0.1.4"
+  "source": "npm:@novalux12/openclaw-umans-usage@0.1.5"
 }
 ```
 
