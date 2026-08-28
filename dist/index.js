@@ -2,8 +2,8 @@ import { fetchUmansUsage } from "./usage.js";
 const PROVIDER_ID = "umans";
 export default {
     id: "openclaw-umans-usage",
-    name: "Umans Code usage dashboard",
-    description: "Surfaces Umans Code plan limits, request budgets, and token usage in OpenClaw's Provider Plans & Billing dashboard.",
+    name: "Umans wallet & usage dashboard",
+    description: "Surfaces Umans wallet balance (when available), burst limits, and token usage in OpenClaw's Provider Plans & Billing dashboard.",
     version: "0.1.4",
     register(api) {
         api.registerProvider({

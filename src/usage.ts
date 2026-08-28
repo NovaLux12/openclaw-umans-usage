@@ -2,8 +2,9 @@ import type { ProviderUsageSnapshot } from "openclaw/plugin-sdk/provider-usage";
 import { buildUsageHttpErrorSnapshot } from "openclaw/plugin-sdk/provider-usage";
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
 
+const UMANS_WALLET_URL = "https://api.code.umans.ai/v1/wallet";
 const UMANS_USAGE_URL = "https://api.code.umans.ai/v1/usage";
-const UMANS_USAGE_RESPONSE_MAX_BYTES = 1024 * 1024;
+const UMANS_RESPONSE_MAX_BYTES = 1024 * 1024;
 
 export type UmansLimits = {
   requests?: {
@@ -53,10 +54,27 @@ export type UmansUsageResponse = {
       resets_at?: unknown;
     };
     priority_budget?: unknown;
-    // future wallet/balance fields — ignored if absent
+  };
+};
+
+/**
+ * Wallet endpoint response (balance-first, Aug 2026).
+ * Shape is deliberately loose: the endpoint is new — accept both flat
+ * (`balance` at the top level) and nested (`wallet.balance`) forms so a
+ * schema tweak on the vendor side doesn't break the mapping.
+ */
+export type UmansWalletResponse = {
+  user_id?: unknown;
+  balance?: unknown;
+  currency?: unknown;
+  spent?: unknown;
+  credited?: unknown;
+  tier?: unknown;
+  wallet?: {
     balance?: unknown;
-    wallet?: unknown;
-    credits?: unknown;
+    currency?: unknown;
+    spent?: unknown;
+    credited?: unknown;
   };
 };
 
@@ -129,18 +147,81 @@ async function fetchWithRetry(
   throw lastError;
 }
 
-async function readPayload(response: Response, timeoutMs: number): Promise<UmansUsageResponse> {
-  const buffer = await readResponseWithLimit(response, UMANS_USAGE_RESPONSE_MAX_BYTES, {
+async function readPayload<T>(
+  response: Response,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  const buffer = await readResponseWithLimit(response, UMANS_RESPONSE_MAX_BYTES, {
     chunkTimeoutMs: timeoutMs,
-    onOverflow: ({ maxBytes }) => new Error(`Umans usage response exceeds ${maxBytes} bytes`),
+    onOverflow: ({ maxBytes }) => new Error(`${label} response exceeds ${maxBytes} bytes`),
     onIdleTimeout: ({ chunkTimeoutMs }) =>
-      new Error(`Umans usage response stalled for ${chunkTimeoutMs}ms`),
+      new Error(`${label} response stalled for ${chunkTimeoutMs}ms`),
   });
   const data = objectRecord(JSON.parse(new TextDecoder().decode(buffer)));
   if (!data) {
-    throw new Error("Umans usage response is not an object");
+    throw new Error(`${label} response is not an object`);
   }
-  return data as UmansUsageResponse;
+  return data as T;
+}
+
+/**
+ * Best-effort wallet fetch. The wallet endpoint is new (Aug 2026) and not
+ * available for every key yet — any failure (network, HTTP error including
+ * 404, or an unparseable body) yields `undefined` so the caller falls back
+ * to /v1/usage instead of surfacing a dead-end error card.
+ */
+async function fetchUmansWallet(params: {
+  token: string;
+  timeoutMs: number;
+  fetchFn: typeof fetch;
+}): Promise<UmansWalletResponse | undefined> {
+  let response: Response;
+  try {
+    response = await fetchWithRetry(params.fetchFn, UMANS_WALLET_URL, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${params.token}`,
+      },
+      signal: AbortSignal.timeout(params.timeoutMs),
+    });
+  } catch {
+    return undefined;
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return undefined;
+  }
+  try {
+    return await readPayload<UmansWalletResponse>(response, params.timeoutMs, "Umans wallet");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Extract a spendable balance from a wallet response. Prefers the flat
+ * `balance` field, falls back to `wallet.balance`; currency defaults to USD
+ * when absent. Returns undefined when the response carries no usable balance.
+ * @internal exported for testing
+ */
+export function extractWalletBalance(
+  data: UmansWalletResponse,
+): { balance: number; currency: string } | undefined {
+  const balance = nonNegativeNumber(data.balance ?? data.wallet?.balance);
+  if (balance === undefined) return undefined;
+  const currency = stringOrUndefined(data.currency ?? data.wallet?.currency) ?? "USD";
+  return { balance, currency };
+}
+
+function buildWalletSnapshot(balance: number, currency: string): ProviderUsageSnapshot {
+  return {
+    provider: "umans",
+    displayName: "Umans Wallet",
+    windows: [],
+    billing: [{ type: "balance", label: "Wallet balance", amount: balance, unit: currency }],
+    plan: "Umans Wallet",
+  };
 }
 
 /** @internal exported for testing (#2) */
@@ -177,6 +258,16 @@ export async function fetchUmansUsage(params: {
   timeoutMs: number;
   fetchFn: typeof fetch;
 }): Promise<ProviderUsageSnapshot> {
+  // Wallet-first: if /v1/wallet answers with a balance, surface it as the
+  // billing balance. Every failure mode (404 because the endpoint is not
+  // available for this key, other HTTP errors, network blips, or a
+  // balance-less body) falls back to /v1/usage below.
+  const wallet = await fetchUmansWallet(params);
+  const walletBalance = wallet ? extractWalletBalance(wallet) : undefined;
+  if (walletBalance) {
+    return buildWalletSnapshot(walletBalance.balance, walletBalance.currency);
+  }
+
   let response: Response;
   try {
     // One retry on transient failure so a brief blip doesn't miss a whole poll cycle (#5)
@@ -203,7 +294,7 @@ export async function fetchUmansUsage(params: {
 
   let data: UmansUsageResponse;
   try {
-    data = await readPayload(response, params.timeoutMs);
+    data = await readPayload<UmansUsageResponse>(response, params.timeoutMs, "Umans usage");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
@@ -219,9 +310,17 @@ export async function fetchUmansUsage(params: {
   const planDisplayName = rawPlanDisplayName ?? "Umans";
   const hasPlan = rawPlanSlug !== undefined || rawPlanDisplayName !== undefined;
   const founding = isFoundingSeat(rawPlanSlug, rawPlanDisplayName);
-  const _serviceAccount = isServiceAccount(rawPlanSlug, rawPlanDisplayName);
-  void _serviceAccount; // used in summary logic below; keep for clarity
-  const displayName = founding ? `${planDisplayName} ✨` : planDisplayName;
+  const serviceAccount = isServiceAccount(rawPlanSlug, rawPlanDisplayName);
+  // Wallet keys: plan.slug = service_account, or no plan at all (pure PAYG).
+  // They carry no request/concurrency quota surface — only token spend (and
+  // the billing balance when the wallet endpoint answers, handled above).
+  const walletKey = serviceAccount || !hasPlan;
+  const showLegacyWindows = hasPlan && !serviceAccount;
+  const displayName = walletKey
+    ? "Umans Wallet"
+    : founding
+      ? `${planDisplayName} ✨`
+      : planDisplayName;
 
   const requestLimit = nonNegativeNumber(data.limits?.requests?.limit);
   const requestHardCap = nonNegativeNumber(data.limits?.requests?.hard_cap);
@@ -249,7 +348,7 @@ export async function fetchUmansUsage(params: {
 
   const windows: NonNullable<ProviderUsageSnapshot["windows"]> = [];
   const windowResetMs = parseResetAtMs(stringOrUndefined(data.window?.resets_at));
-  if (effectiveRequestLimit !== undefined && effectiveRequestLimit > 0) {
+  if (showLegacyWindows && effectiveRequestLimit !== undefined && effectiveRequestLimit > 0) {
     const remainingForCalc = effectiveRemainingRequests ?? effectiveRequestLimit;
     const used = Math.max(0, effectiveRequestLimit - remainingForCalc);
     const pct = Math.min(100, Math.max(0, (used / effectiveRequestLimit) * 100));
@@ -261,7 +360,7 @@ export async function fetchUmansUsage(params: {
       ...(windowResetMs !== undefined ? { resetAt: windowResetMs } : {}),
     });
   }
-  if (effectiveConcurrencyLimit !== undefined && effectiveConcurrencyLimit > 0) {
+  if (showLegacyWindows && effectiveConcurrencyLimit !== undefined && effectiveConcurrencyLimit > 0) {
     const pct = Math.min(100, Math.max(0, (concurrentSessions / effectiveConcurrencyLimit) * 100));
     windows.push({
       label: "Concurrency",
@@ -280,8 +379,9 @@ export async function fetchUmansUsage(params: {
   if (tokensCached !== undefined) {
     billing.push({ type: "spend", label: "Tokens cached", amount: tokensCached, unit: "tokens" });
   }
-  // Headroom — visual nod to the safety net (founding or service_account)
-  if (headroom !== undefined && headroom > 0) {
+  // Headroom — visual nod to the safety net. Legacy-plan surface only:
+  // wallet keys consume from a $ balance and have no request quota to buffer.
+  if (showLegacyWindows && headroom !== undefined && headroom > 0) {
     billing.push({
       type: "spend",
       label: "Headroom (Nova's safety net ✨)",
@@ -292,21 +392,23 @@ export async function fetchUmansUsage(params: {
 
   const resetTimeLabel = formatResetTime(windowResetMs);
   const summaryParts: string[] = [];
-  if (effectiveRemainingRequests !== undefined && effectiveRequestLimit !== undefined) {
-    summaryParts.push(`${effectiveRemainingRequests}/${effectiveRequestLimit} requests remaining`);
-  }
-  if (founding && headroom !== undefined) {
-    summaryParts.push(`+${headroom} founding headroom`);
-  }
-  if (concurrentSessions !== undefined && effectiveConcurrencyLimit !== undefined) {
-    summaryParts.push(`${concurrentSessions}/${effectiveConcurrencyLimit} concurrent sessions`);
-  }
-  if (resetTimeLabel) {
-    summaryParts.push(`resets at ${resetTimeLabel}`);
+  if (showLegacyWindows) {
+    if (effectiveRemainingRequests !== undefined && effectiveRequestLimit !== undefined) {
+      summaryParts.push(`${effectiveRemainingRequests}/${effectiveRequestLimit} requests remaining`);
+    }
+    if (founding && headroom !== undefined) {
+      summaryParts.push(`+${headroom} founding headroom`);
+    }
+    if (concurrentSessions !== undefined && effectiveConcurrencyLimit !== undefined) {
+      summaryParts.push(`${concurrentSessions}/${effectiveConcurrencyLimit} concurrent sessions`);
+    }
+    if (resetTimeLabel) {
+      summaryParts.push(`resets at ${resetTimeLabel}`);
+    }
   }
   const summary = summaryParts.length > 0 ? summaryParts.join(" · ") : undefined;
 
-  const planField = hasPlan ? planDisplayName : undefined;
+  const planField = walletKey ? "Umans Wallet" : hasPlan ? planDisplayName : undefined;
 
   return {
     provider: "umans",
@@ -314,8 +416,6 @@ export async function fetchUmansUsage(params: {
     windows,
     ...(billing.length > 0 ? { billing } : {}),
     ...(summary ? { summary } : {}),
-    // Use API's display_name directly (#6) — service_account/wallet works without code changes.
-    // Omitted when API returned no plan at all (future pure PAYG).
     ...(planField ? { plan: planField } : {}),
   };
 }
