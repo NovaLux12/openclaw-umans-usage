@@ -70,7 +70,7 @@ The plugin is **wallet-first**: it probes `GET https://api.code.umans.ai/v1/wall
 
 **Wallet keys** (current standard):
 
-- Provider card named **Umans Wallet** (plan badge omitted in favour of the wallet identity)
+- Provider card named **Umans Wallet** with a matching plan badge — the raw `service_account` slug is never exposed to the dashboard
 - **Token counters** — input, output, and cached tokens for the current window
 - **Wallet balance row** — appears automatically the moment `GET /v1/wallet` answers
 - No Request window / no Concurrency / no reset line — the burst governor isn't a spend surface (see above)
