@@ -27,6 +27,14 @@ export function isFoundingSeat(slug, displayName) {
     const lowerName = displayName?.toLowerCase() ?? "";
     return lowerSlug.includes("founding") || lowerName.includes("founding");
 }
+/** @internal exported for testing — wallet/service_account detection (Aug 2026: plans removed) */
+export function isServiceAccount(slug, displayName) {
+    if (!slug && !displayName)
+        return false;
+    const lowerSlug = slug?.toLowerCase() ?? "";
+    const lowerName = displayName?.toLowerCase() ?? "";
+    return lowerSlug === "service_account" || lowerName === "service account";
+}
 /**
  * Retry a fetch call on transient failure (#5).
  * One retry after 2s covers DNS hiccups and brief network blips
@@ -128,31 +136,42 @@ export async function fetchUmansUsage(params) {
             error: `Bad usage response — ${msg}`,
         };
     }
-    const planSlug = stringOrUndefined(data.plan?.slug) ?? "unknown";
-    const planDisplayName = stringOrUndefined(data.plan?.display_name) ?? "Umans";
-    const founding = isFoundingSeat(planSlug, planDisplayName);
+    const rawPlanSlug = stringOrUndefined(data.plan?.slug);
+    const rawPlanDisplayName = stringOrUndefined(data.plan?.display_name);
+    const planDisplayName = rawPlanDisplayName ?? "Umans";
+    const hasPlan = rawPlanSlug !== undefined || rawPlanDisplayName !== undefined;
+    const founding = isFoundingSeat(rawPlanSlug, rawPlanDisplayName);
+    const _serviceAccount = isServiceAccount(rawPlanSlug, rawPlanDisplayName);
+    void _serviceAccount; // used in summary logic below; keep for clarity
     const displayName = founding ? `${planDisplayName} ✨` : planDisplayName;
     const requestLimit = nonNegativeNumber(data.limits?.requests?.limit);
     const requestHardCap = nonNegativeNumber(data.limits?.requests?.hard_cap);
     const effectiveRequestLimit = requestLimit ?? requestHardCap;
     const remainingRequests = nonNegativeNumber(data.usage?.remaining_requests);
+    const weightedRemainingRequests = nonNegativeNumber(data.usage?.weighted_remaining_requests);
+    // Prefer weighted_remaining_requests when present — gateway enforces weighted quota
+    // (Flash = 0.5 weight is why 7968 raw != 7969 weighted; earlier bug showed 249 vs 68)
+    const effectiveRemainingRequests = weightedRemainingRequests ?? remainingRequests;
     const concurrencyLimit = nonNegativeNumber(data.limits?.concurrency?.limit);
     const concurrencyHardCap = nonNegativeNumber(data.limits?.concurrency?.hard_cap);
     const effectiveConcurrencyLimit = concurrencyLimit ?? concurrencyHardCap;
-    const concurrentSessions = nonNegativeNumber(data.usage?.concurrent_sessions) ?? 0;
+    const concurrentSessionsRaw = nonNegativeNumber(data.usage?.concurrent_sessions);
+    const weightedConcurrentSessions = nonNegativeNumber(data.usage?.weighted_concurrent_sessions);
+    const concurrentSessions = weightedConcurrentSessions ?? concurrentSessionsRaw ?? 0;
     const tokensIn = nonNegativeNumber(data.usage?.tokens_in);
     const tokensOut = nonNegativeNumber(data.usage?.tokens_out);
     const tokensCached = nonNegativeNumber(data.usage?.tokens_cached);
-    // Headroom: the buffer between soft limit and hard cap
+    // Headroom: buffer between soft limit and hard cap (8000/16000 for service_account)
     const headroom = requestHardCap !== undefined && requestLimit !== undefined && requestHardCap > requestLimit
         ? requestHardCap - requestLimit
         : undefined;
     const windows = [];
     const windowResetMs = parseResetAtMs(stringOrUndefined(data.window?.resets_at));
     if (effectiveRequestLimit !== undefined && effectiveRequestLimit > 0) {
-        const used = Math.max(0, effectiveRequestLimit - (remainingRequests ?? effectiveRequestLimit));
+        const remainingForCalc = effectiveRemainingRequests ?? effectiveRequestLimit;
+        const used = Math.max(0, effectiveRequestLimit - remainingForCalc);
         const pct = Math.min(100, Math.max(0, (used / effectiveRequestLimit) * 100));
-        // Founding seats: once you tap into the headroom, the label shifts as an easter egg
+        // Founding seats: once you tap into headroom, label shifts as easter egg
         const inNovaZone = founding && headroom !== undefined && used >= effectiveRequestLimit;
         windows.push({
             label: inNovaZone ? "✨ Nova's zone" : "Request window",
@@ -178,7 +197,7 @@ export async function fetchUmansUsage(params) {
     if (tokensCached !== undefined) {
         billing.push({ type: "spend", label: "Tokens cached", amount: tokensCached, unit: "tokens" });
     }
-    // Founding headroom — a visual nod to the safety net
+    // Headroom — visual nod to the safety net (founding or service_account)
     if (headroom !== undefined && headroom > 0) {
         billing.push({
             type: "spend",
@@ -189,8 +208,8 @@ export async function fetchUmansUsage(params) {
     }
     const resetTimeLabel = formatResetTime(windowResetMs);
     const summaryParts = [];
-    if (remainingRequests !== undefined && effectiveRequestLimit !== undefined) {
-        summaryParts.push(`${remainingRequests}/${effectiveRequestLimit} requests remaining`);
+    if (effectiveRemainingRequests !== undefined && effectiveRequestLimit !== undefined) {
+        summaryParts.push(`${effectiveRemainingRequests}/${effectiveRequestLimit} requests remaining`);
     }
     if (founding && headroom !== undefined) {
         summaryParts.push(`+${headroom} founding headroom`);
@@ -202,14 +221,16 @@ export async function fetchUmansUsage(params) {
         summaryParts.push(`resets at ${resetTimeLabel}`);
     }
     const summary = summaryParts.length > 0 ? summaryParts.join(" · ") : undefined;
+    const planField = hasPlan ? planDisplayName : undefined;
     return {
         provider: "umans",
         displayName,
         windows,
         ...(billing.length > 0 ? { billing } : {}),
         ...(summary ? { summary } : {}),
-        // Use the API's display_name directly (#6) — new plans work without code changes
-        plan: planDisplayName,
+        // Use API's display_name directly (#6) — service_account/wallet works without code changes.
+        // Omitted when API returned no plan at all (future pure PAYG).
+        ...(planField ? { plan: planField } : {}),
     };
 }
 //# sourceMappingURL=usage.js.map
