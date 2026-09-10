@@ -8,7 +8,7 @@ OpenClaw provider plugin that surfaces **Umans** wallet balance (when the API ex
 
 Umans no longer sells request allowances. It sells **tokens, prepaid through a credit wallet**:
 
-- **Top-up** credits at `app.umans.ai/billing` (wallet tab). Optional auto-top-up; promos apply at the point of purchase (e.g. **3× credit on DeepSeek V4 Flash** until 2026-09-10).
+- **Top-up** credits at `app.umans.ai/billing` (wallet tab). Optional auto-top-up; promos apply at the point of purchase.
 - **Balance is the real limit.** When your dollar balance hits zero, requests stop. There is no "you're out of requests" state — there's "you're out of money" (or you're temporarily burst-limited, see below).
 - **Pay-per-token pricing** differs per model. Live `/v1/models` listing (public, no auth, 2026-08-28):
 
