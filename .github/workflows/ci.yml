@@ -20,4 +20,12 @@ jobs:
       # `openclaw/plugin-sdk/*` types resolve for tsc.
       - run: npm install openclaw@2026.7.1 --no-save --no-audit --no-fund
       - run: npx tsc --noEmit
+      # The test exercises the BUILT artifact: `src/usage.test.ts` imports
+      # `../dist/usage.js`, because `dist` is what the plugin actually ships
+      # (`package.json`'s `files` allowlist is `dist`, `openclaw.plugin.json`,
+      # `README.md`). The build used to be a no-op here only because `dist/`
+      # was committed to the repository, which meant CI was testing whatever
+      # stale build happened to be checked in rather than the current source.
+      # With `dist/` untracked, CI has to build it.
+      - run: npm run build
       - run: npm test
