@@ -1,3 +1,10 @@
 node_modules/
 *.log
 .DS_Store
+
+# Build output. Not tracked in git: it is generated from src/ by `npm run
+# build` (tsc) and shipped inside the npm tarball via the "files" allowlist
+# in package.json. npm's "files" entries cannot be excluded by .gitignore,
+# and `prepack` runs `npm run build` before every pack/publish, so the
+# published package always contains a freshly built dist/.
+dist/

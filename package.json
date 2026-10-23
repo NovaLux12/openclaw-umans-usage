@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc",
     "test": "node --experimental-strip-types --test src/usage.test.ts",
-    "prepublishOnly": "npm run build && npm test"
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "openclaw",

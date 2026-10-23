@@ -1,0 +1,115 @@
+name: release
+
+# Release tags are v-prefixed to match the rest of the fleet (v0.1.0, v0.2.0,
+# v0.3.2, v1.3.0, ...). npm package versions carry no prefix — npm rejects
+# them — so the mapping is: git tag `v<version>`, package version
+# `<version>`.
+#
+# A tag without the `v` prefix does not match this trigger, so it produces
+# no release. That is the guard: the tag stream cannot silently change
+# convention partway through again.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Exact v-prefixed release tag (must equal the selected ref)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches every version string
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE:-}" != "tag" || "${GITHUB_REF:-}" != refs/tags/v* ]]; then
+            echo "release requires a v-prefixed tag; refusing ref ${GITHUB_REF:-<unset>}" >&2
+            echo "npm package versions carry no prefix, but git tags in this fleet do." >&2
+            exit 1
+          fi
+          tag="${GITHUB_REF#refs/tags/}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid release tag: $tag" >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch && "${REQUESTED_TAG:-}" != "$tag" ]]; then
+            echo "manual dispatch tag must exactly match the selected ref: ${REQUESTED_TAG:-<missing>} != $tag" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          manifest_version="$(node -p "require('./openclaw.plugin.json').version")"
+          source_version="$(node -p "require('fs').readFileSync('src/index.ts','utf8').match(/version: \"([^\"]+)\"/)[1]")"
+          if [[ "$package_version" != "$version" || "$manifest_version" != "$version" || "$source_version" != "$version" ]]; then
+            echo "version drift: tag=$version package=$package_version manifest=$manifest_version source=$source_version" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # openclaw is not a locked devDependency (its published npm-shrinkwrap.json
+      # pins a transitive dependency tree we cannot patch). Install it ad hoc so
+      # openclaw/plugin-sdk/* types resolve for tsc. Same reason as in ci.yml.
+      - run: npm install openclaw@2026.7.1 --no-save --no-audit --no-fund
+
+      - run: npx tsc --noEmit
+
+      - run: npm test
+
+      # npm publish is manual for this repo (no npm credentials configured
+      # here), so the release tag must already exist on the registry. Checking
+      # it here turns "tagged before publishing" into a loud failure instead of
+      # a release that installs nothing.
+      - name: Verify the version is published on npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF#refs/tags/v}"
+          if ! npm view "@novalux12/openclaw-umans-usage@$version" version >/dev/null 2>&1; then
+            echo "version $version is not on npm yet." >&2
+            echo "publish first:  npm publish" >&2
+            exit 1
+          fi
+          echo "OK: @novalux12/openclaw-umans-usage@$version is on npm."
+
+      # dist/ is not tracked in git. `prepack` runs `npm run build`, so the
+      # tarball always carries a freshly built dist/ — verified: npm's "files"
+      # allowlist cannot be subtracted from by .gitignore.
+      - name: Pack the npm tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/stage
+          npm pack --pack-destination dist/stage
+          cd dist/stage
+          sha256sum *.tgz > SHA256SUMS
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/stage/*.tgz
+            dist/stage/SHA256SUMS
+          generate_release_notes: true

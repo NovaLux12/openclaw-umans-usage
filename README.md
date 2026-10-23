@@ -242,6 +242,8 @@ PRs are welcome. A few things to know:
   ```bash
   npm install openclaw@2026.7.1 --no-save
   ```
+- **`dist/` is not tracked in git.** It is generated from `src/` by `npm run build` (tsc) and shipped inside the npm tarball via the `files` allowlist in `package.json`. `prepack` runs the build before every pack/publish, so the published package always contains a fresh `dist/`. If you pull and find no `dist/`, run `npm run build`.
+- **Releases are cut from `v`-prefixed tags** (`v0.1.6`, `v0.1.7`, ...), matching the rest of the fleet. npm package versions carry no prefix — npm rejects them — so the mapping is: git tag `v<version>`, package version `<version>`. A `v`-tag triggers `.github/workflows/release.yml`, which checks the tag against `package.json`, `openclaw.plugin.json` and `src/index.ts`, runs the tests, and attaches the packed tarball to the GitHub Release. npm publish itself is manual: bump the three versions, `npm publish`, then tag `v<version>`.
 
 First PR already merged — thanks @hkJerryLeung!
 
