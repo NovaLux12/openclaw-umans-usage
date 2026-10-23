@@ -10,23 +10,23 @@ Umans no longer sells request allowances. It sells **tokens, prepaid through a c
 
 - **Top-up** credits at `app.umans.ai/billing` (wallet tab). Optional auto-top-up; promos apply at the point of purchase.
 - **Balance is the real limit.** When your dollar balance hits zero, requests stop. There is no "you're out of requests" state — there's "you're out of money" (or you're temporarily burst-limited, see below).
-- **Pay-per-token pricing** differs per model (live `/v1/models` listing, public, no auth — _last verified 2026-09-10_; vendor prices move without notice, source of truth: `app.umans.ai/billing`):
+- **Pay-per-token pricing** differs per model (live `/v1/models` listing, public, no auth — _last verified 2026-10-23_; vendor prices move without notice, source of truth: `app.umans.ai/billing`):
 
   | Model | Input $/M tokens | Output $/M tokens |
   |-------|------------------|-------------------|
   | `umans-deepseek-v4-flash-0731` (Flash) | **$0.14** | **$0.28** |
+  | `umans-coder` | $0.15 | $0.50 |
+  | `umans-glm-5.3-flash` | $0.15 | $0.50 |
+  | `umans-deepseek-v4.1-flash` | $0.15 | $0.60 |
+  | `umans-deepseek-v4.1-flash-1017` | $0.15 | $0.60 |
   | `umans-flash` | $0.15 | $1.00 |
   | `umans-qwen3.6-35b-a3b` | $0.15 | $1.00 |
-  | `umans-coder` | $0.15 | $0.50 |
-  | `umans-kimi-k2.7` | $0.95 | $4.00 |
-  | `umans-deepseek-v4-pro-0813` | $1.32 | $3.96 |
-  | `umans-glm-5.2` | $1.40 | $4.40 |
-  | `umans-kimi-k3` | $3.00 | $15.00 |
-  | `umans-deepseek-v4.1-flash-lab` (free lab) | $0.00 | $0.00 |
-  | `umans-glm-5.3-flash` | $0.15 | $0.50 |
   | `umans-glm-5.3` | $1.40 | $4.40 |
+  | `umans-kimi-k3` | $3.00 | $15.00 |
 
-  Flash also has a **cache rate of $0.028/M tokens**. The billing formula was verified to the cent against real ledger rows: `input × $0.14/M + cached × $0.028/M + output × $0.28/M`.
+  The Flash model also has a **cache rate of $0.028/M tokens**. That figure is NOT from the
+  `/v1/models` listing — that endpoint publishes input and output only — it was verified to
+  the cent against real ledger rows: `input × $0.14/M + cached × $0.028/M + output × $0.28/M`.
 
 - **Tiers 0–3 unlock burst limits**, and only *paid* top-ups count toward them — promo/bonus credits never do:
 
